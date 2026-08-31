@@ -9,7 +9,7 @@ public:
     void drawBufferPixel(int32_t x, int32_t y, uint32_t color, uint8_t bpp);
     void update();
     void update(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t *data);
-    void updataPartial(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
+    void updatePartial(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
     
 #ifdef  USE_MUTIGRAY_EPAPER
     void initGrayMode(uint8_t grayLevel);
@@ -32,6 +32,7 @@ private:
     bool _entemp;
     float _temp;
     float _humi;
+    uint8_t *_shadowBuffer;  // Shadow buffer to track what's displayed on e-paper
 
     typedef struct 
     {

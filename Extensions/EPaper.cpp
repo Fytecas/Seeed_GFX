@@ -1,4 +1,4 @@
-EPaper::EPaper() : TFT_eSprite(this), _sleep(true), _entemp(true), _temp(16.00), _humi(50.00)
+EPaper::EPaper() : TFT_eSprite(this), _sleep(true), _entemp(true), _temp(16.00), _humi(50.00), _shadowBuffer(nullptr)
 {
     setColorDepth(EPD_COLOR_DEPTH);
     createSprite(_width, _height, 1);
@@ -39,6 +39,13 @@ void EPaper::begin(uint8_t wake)
 
 void EPaper::update()
 {
+    // Allocate shadow buffer on first update if not already done
+    if (!_shadowBuffer) {
+        size_t bufferSize = (_width * _height) >> 3;
+        _shadowBuffer = (uint8_t *)malloc(bufferSize);
+        if (!_shadowBuffer) return;
+    }
+
     wake();
     EPD_SET_WINDOW(0, 0, (_width - 1), (_height - 1));
     if(!_grayLevel)
@@ -63,12 +70,19 @@ void EPaper::update()
             EPD_UPDATE_GRAY();
       #endif  
     }
+    
+    // Sync shadow buffer after full update
+    size_t bufferSize = (_width * _height) >> 3;
+    memcpy(_shadowBuffer, _img8, bufferSize);
+    
     sleep();
 }
 
 #ifdef USE_PARTIAL_EPAPER
-void EPaper::updataPartial(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
+void EPaper::updatePartial(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
 {
+    // Shadow buffer must be initialized from a full update first
+    if (!_shadowBuffer) return;
 
     int32_t bx = x;
     int32_t by = y;
@@ -121,20 +135,26 @@ void EPaper::updataPartial(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
     uint16_t stride = _width >> 3;           
     uint16_t win_bytes_per_row = w_aligned >> 3;
 
-    const uint8_t* src0 = _img8 + (yy * stride) + (x0 >> 3);
+    const uint8_t* src_new = _img8 + (yy * stride) + (x0 >> 3);
+    const uint8_t* src_old = _shadowBuffer + (yy * stride) + (x0 >> 3);
 
     size_t win_size = (size_t)win_bytes_per_row * hh;
-    uint8_t* winbuf = (uint8_t*)malloc(win_size);
-    if (!winbuf) return;
-
-
-    for (uint16_t row = 0; row < hh; row++) {
-        memcpy(winbuf + row * win_bytes_per_row,
-               src0  + row * stride,
-               win_bytes_per_row);
+    uint8_t* newbuf = (uint8_t*)malloc(win_size);
+    uint8_t* oldbuf = (uint8_t*)malloc(win_size);
+    if (!newbuf || !oldbuf) {
+        free(newbuf);
+        free(oldbuf);
+        return;
     }
 
-
+    for (uint16_t row = 0; row < hh; row++) {
+        memcpy(newbuf + row * win_bytes_per_row,
+               src_new + row * stride,
+               win_bytes_per_row);
+        memcpy(oldbuf + row * win_bytes_per_row,
+               src_old + row * stride,
+               win_bytes_per_row);
+    }
 
     #ifdef EPD_HORIZONTAL_MIRROR
     uint16_t x_end = x0 + w_aligned - 1;
@@ -142,14 +162,24 @@ void EPaper::updataPartial(uint16_t x, uint16_t y, uint16_t w, uint16_t h)
     uint16_t mx1 = (_width - 1) - x0;
 
     EPD_SET_WINDOW(mx0, yy, mx1, yy + hh - 1);
-    EPD_PUSH_NEW_COLORS_FLIP(w_aligned, hh, winbuf);
+    EPD_PUSH_OLD_COLORS_FLIP(w_aligned, hh, oldbuf);
+    EPD_PUSH_NEW_COLORS_FLIP(w_aligned, hh, newbuf);
     #else
     EPD_SET_WINDOW(x0, yy, x0 + w_aligned - 1, yy + hh - 1);
-    EPD_PUSH_NEW_COLORS(w_aligned, hh, winbuf);
+    EPD_PUSH_OLD_COLORS(w_aligned, hh, oldbuf);
+    EPD_PUSH_NEW_COLORS(w_aligned, hh, newbuf);
     #endif
     EPD_UPDATE_PARTIAL();
 
-    free(winbuf);
+    // Update shadow buffer with new values after partial update
+    for (uint16_t row = 0; row < hh; row++) {
+        memcpy(_shadowBuffer + (yy + row) * stride + (x0 >> 3),
+               newbuf + row * win_bytes_per_row,
+               win_bytes_per_row);
+    }
+
+    free(newbuf);
+    free(oldbuf);
     sleep();
 }
 
