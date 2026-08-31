@@ -2,6 +2,16 @@
 
 A professional graphics library for Seeed hardware platforms, forked from [TFT_eSPI](https://github.com/Bodmer/TFT_eSPI) with significant enhancements to support Seeed's development boards and display modules.
 
+## ⚠️ Fork Notice: E-Paper Partial Update Fix
+
+This fork addresses a critical bug in the original Seeed GFX where only the first E-Paper partial update would work—after that, pixels would get stuck and stop responding to updates until a full refresh was performed.
+
+**What's Fixed**: Added a shadow buffer to the EPaper class to properly track display state between partial updates.
+
+**Important**: This fix was implemented with AI and hasn't had extensive review—use at your own risk.
+
+The original maintainers appear to be inactive, closing important E-Paper issues without resolution. I created this fork to get my display working properly.
+
 ## Online Configuration Tool
 
 To simplify the hardware setup, we provide an online tool that helps you quickly generate the configuration code for your specific hardware combination.
